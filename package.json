@@ -1,0 +1,19 @@
+{
+  "name": "sampleazurebot",
+  "version": "1.0.0",
+  "description": "autobot",
+  "main": "latestworking.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/natasha-fission/Fission_Bot.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/natasha-fission/Fission_Bot/issues"
+  },
+  "homepage": "https://github.com/natasha-fission/Fission_Bot#readme"
+}
