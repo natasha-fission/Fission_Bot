@@ -1,38 +1,8 @@
 var restify = require("restify");
 var builder = require("botbuilder");
-var mysql = require('mysql');
-var tedious = require('tedious')
-
-//-----------------
-// Azure mysql DB
-//-----------------
-var connection = mysql.createConnection({
-  host     : 'us-cdbr-azure-west-c.cloudapp.net',
-  user     : 'b53b72110e4c63',
-  password : '38210b5d',
-  database : 'acsm_b33ab7b73a67497'
-});
-connection.connect();
-
-//----------------------
-//Connect to Azure sql server database
-//----------------------
-//var Connection = require('tedious').Connection;
-//var Request = require('tedious').Request;  
-//var TYPES = require('tedious').TYPES;
-//var config = {  
-//        userName: 'srikanthsutharam08',  
-//        password: 'SbsUrrTai@#345',  
-//       server: 'botdbserver.database.windows.net',  
-//        // When you connect to Azure SQL Database, you need these next options.  
-//        options: {encrypt: true, database: 'botdb'}  
-//    };  
-//var connection = new Connection(config);  
-//connection.on('connect', function(err) {  
-    // If no error, then good to proceed.  
-//    console.log("Connected");
-//});
-//----------------------
+var urlencode = require('urlencode');
+var Client = require('node-rest-client').Client;
+var client = new Client();
 
 //=========================================================
 // Bot Setup
@@ -46,8 +16,7 @@ server.listen(process.env.port || process.env.PORT || 3978, function () {
    console.log('%s listening to %s', server.name, server.url); 
 });
 
-var profileInfo = {}
-var surveydata = null
+var survey_data = {}
 var profileQtObj;
 // Create chat bot
 var botConnectorOptions = { 
@@ -55,22 +24,30 @@ var botConnectorOptions = {
     appPassword: process.env.BOTFRAMEWORK_APPSECRET
 };
 var connector = new builder.ChatConnector(botConnectorOptions);
-
 var bot = new builder.UniversalBot(connector);
 server.post('/api/messages', connector.listen());
 
 server.post('/pushsurvey', function respond(req, res, next) {
-	var filteredUsers = filterUsers(profileInfo)
-	surveydata = req.body;
-	//var filteredUsers = {"29:1vYGBvog2ILNJLxVKn5X0V4DiT9SsUDaBIlmZyPChRQI":{"user_id":"29:1vYGBvog2ILNJLxVKn5X0V4DiT9SsUDaBIlmZyPChRQI","name":"Srikanth SB","address":{"id":"t0cSRkzEeK4vITA","channelId":"skype","user":{"id":"29:1vYGBvog2ILNJLxVKn5X0V4DiT9SsUDaBIlmZyPChRQI","name":"Srikanth SB"},"conversation":{"id":"29:1vYGBvog2ILNJLxVKn5X0V4DiT9SsUDaBIlmZyPChRQI"},"bot":{"id":"28:c0a89848-4286-43b8-9523-4cb07b6143a7","name":"restapibot"},"serviceUrl":"https://skype.botframework.com","useAuth":"true"},"age":26,"gender":"Male","maritalstatus":"false","email":"asdf","city":"asdf","infoGathered":"true"}}
- 	for (var key in filteredUsers) {
-		if (filteredUsers.hasOwnProperty(key)) {
-			console.log(key + " -> " + JSON.stringify(filteredUsers[key]));
-			bot.beginDialog(filteredUsers[key].address, '/notify');
-		}
+	var inputsurveydata = req.body
+	var filteredUsers = inputsurveydata.users
+//	var filteredUsers = [{"id":"d2b794f47f8f41aeb6f659bf1cfbee3a","channelId":"emulator","user":{"id":"617d3bf8","name":"User1"},"conversation":{"isGroup":false,"id":"1cf91be5","name":"Conv1"},"bot":{"id":"5e4f5dfa","name":"Bot1"},"serviceUrl":"http://localhost:9000","useAuth":false}]
+
+
+//var filteredUsers = [{"id":"JVuBqSefc9x","channelId":"skype","user":{"id":"29:1vUMyT4wHzcOL4Y-HjK84ehrKSYjtrqgC6Fr-809jV24","name":"Jayaram Reddy Y"},"conversation":{"id":"29:1vUMyT4wHzcOL4Y-//HjK84ehrKSYjtrqgC6Fr-809jV24"},"bot":{"id":"28:c1bb3e1e-5cbd-4204-8e2c-2b45b569910a","name":"fissionmrbot"},"serviceUrl":"https://skype.botframework.com","useAuth":true}]
+
+	if(filteredUsers && (filteredUsers.length > 0)) {
+		filteredUsers.forEach(function(address){
+			var userId = address.user.id
+			if(!survey_data[userId]) {
+				survey_data[userId] = {}
+			}
+			survey_data[userId] = {"surveyId":inputsurveydata.surveyId, "proposer": inputsurveydata.proposer, "surveyname":inputsurveydata.surveyname,"surveyquestion": inputsurveydata.surveyquestion}
+			bot.beginDialog(address, '/notify');
+		});
 	}
+ 	
  	res.send('Sent survey requests to end users::'+JSON.stringify(req.body));
-})
+});
 
 //=========================================================
 // Activity Events
@@ -107,16 +84,9 @@ bot.on('conversationUpdate', function (message) {
 
 bot.on('contactRelationUpdate', function (message) {
     if (message.action === 'add') {
-        var name = message.user ? message.user.name : null;
-		var user_id = message.user.id
-		profileInfo[user_id] = {"user_id": user_id, "name":name}
-		var reply = new builder.Message()
-                .address(message.address)
-                .text("Hello %s... Thanks for adding me into your contacts.Say something.", name || 'there');
-        bot.send(reply);
+		bot.beginDialog(message.address, '/profileInfo');
     } else {
         //deleteProfileInfo(message.user.id)
-		deleteUserInfo(message.user.id)
     }
 });
 
@@ -130,59 +100,43 @@ bot.dialog('/', [
 
 bot.dialog('/profileInfo', [
 	function(session) {
-		var user_id = session.message.user.id
-		if(!profileInfo[user_id]) {
-			profileInfo[user_id] = {}
-			session.beginDialog('/gatherProfileInfo')
-		} else {
-			if(profileInfo[user_id]["infoGathered"]) {
-				session.send(JSON.stringify(profileInfo[user_id]))
-			} else {
-				session.beginDialog('/gatherProfileInfo')
-			}
-		}
-	}
-])
-
-bot.dialog('/gatherProfileInfo', [
-	function(session) {
-		profileInfo[session.message.user.id]["address"] = session.message.address; 
-		builder.Prompts.number(session, 'What is your age?');
+		session.privateConversationData.userId = session.message.user.id
+		var name = session.message.user ? session.message.user.name : null
+		session.privateConversationData.address = session.message.address
+		builder.Prompts.number(session, 'Hello... Thanks for adding me into your contacts. Please fill out the basic profile info. What is your age?');
 	},
 	function(session, results) {
-		profileInfo[session.message.user.id]["age"] = results.response;
+		session.privateConversationData.age = results.response;
 		builder.Prompts.choice(session, 'What is your Gender?', ["Male","Female","Other"]);
     },
     function(session, results) {
-		profileInfo[session.message.user.id]["gender"] = results.response.entity;
+		session.privateConversationData.gender = results.response.entity;
 		builder.Prompts.confirm(session, "Are you Married?");   
 	}, 
     function (session, results) {
-		profileInfo[session.message.user.id]["maritalstatus"] = results.response;
+		session.privateConversationData.maritalstatus = results.response;
 		builder.Prompts.text(session, "Please enter your email id?");
 	}, 
     function (session, results) {
-		profileInfo[session.message.user.id]["email"] = results.response;
+		session.privateConversationData.email = urlencode(results.response);
 		builder.Prompts.text(session, "What is your current residing city?");
 	},
 	function (session, results) {
-		profileInfo[session.message.user.id]["city"] = results.response; 
-		profileInfo[session.message.user.id]["infoGathered"] = "true";
-		//saveUserInfo(profileInfo[session.message.user.id])
-		session.endDialog(JSON.stringify(profileInfo[session.message.user.id]));
+		session.privateConversationData.city = results.response;
+		session.privateConversationData.infoGathered = "true";
+		saveProfileInfo(session.privateConversationData)
+		session.endDialog(JSON.stringify(session.privateConversationData));
 	}
 ]);
 
 
 bot.dialog('/notify', [
 	function(session) {
-		builder.Prompts.confirm(session, "We have a new Profile Survey.Do you want to participate?");
+		builder.Prompts.confirm(session, "Hii, We have a new "+ survey_data[session.message.user.id]["surveyname"] +
+					" Survey conducted by "+ survey_data[session.message.user.id]["proposer"] +".Do you want to participate?");
 	},
-	function (session, results) {
+	function(session, results) {
 		if(results.response){
-			session.userData.questionId = 0;
-			session.userData.response = [];
-			profileQtObj = surveydata;
 			session.beginDialog('/survey');
 		} else {
 			session.endDialog("Thank You for your time :)");
@@ -192,38 +146,10 @@ bot.dialog('/notify', [
 
 bot.dialog('/survey', [
     function (session) {
-        if (!session.userData.questionId) {
-            session.userData.questionId = 0;
-        } 
-        if (session.userData.questionId < profileQtObj.survey.length) {
-            askQuestion(session);
-        } else {
-            var txt = ""; 
-            //Or save the backing store..
-            session.userData.response.forEach(function(response) {
-                txt += "\n\n";
-                txt += "---\n\n";
-                txt += "**Question : " + profileQtObj.survey[response.questionId].question + "**";
-                txt += "\n\n";
-                if(profileQtObj.survey[response.questionId].type == 'multi') {
-                    txt += " Answer : " + response.result.entity;
-                } else {
-                    txt += " Answer : " + response.result;
-                }
-                txt += "\n\n";   
-            }, this);
-            session.userData = null;
-            var endMsg = "Thank you for your time and patience. Your survey response : " + txt;
-            session.endDialog(endMsg);
-        }
+		askQuestion(session);
     },
-    function (session, results) {        
-        if(!session.userData.response) {
-            session.userData.response = [];
-        }
-        session.userData.response.push({questionId : session.userData.questionId, result: results.response});
-        session.userData.questionId = session.userData.questionId + 1;
-        session.replaceDialog('/survey');
+    function (session, results) {
+		session.endDialog("Response::"+ JSON.stringify(results.response.entity));
     }
 ]);
 
@@ -232,75 +158,36 @@ bot.dialog('/survey', [
 //=========================================================
 
 function askQuestion(session) {
-    var index = session.userData.questionId;
-    if(profileQtObj.survey[index].type === 'multi') {
-        builder.Prompts.choice(session, profileQtObj.survey[index].question, profileQtObj.survey[index].choices);
-    } else if (profileQtObj.survey[index].type === 'bool') {
-        builder.Prompts.confirm(session, profileQtObj.survey[index].question);
-    } else if (profileQtObj.survey[index].type === 'text') {
-        builder.Prompts.text(session, profileQtObj.survey[index].question);
+	var surveyQuestion = survey_data[session.message.user.id]["surveyquestion"]
+	if(surveyQuestion.type === 'multi') {
+        builder.Prompts.choice(session, surveyQuestion.question, surveyQuestion.choices);
+    } else if (surveyQuestion.type === 'bool') {
+        builder.Prompts.confirm(session, surveyQuestion.question);
+    } else if (surveyQuestion.type === 'text') {
+        builder.Prompts.text(session, surveyQuestion.question);
     }
 }
+
+/**
+Sends profile Information to Server.
+**/
+function saveProfileInfo(profileInfo){
+
+	console.log("Pushing profile information back to server");
+	var args = {
+		parameters: { userId: profileInfo["userId"], userName: profileInfo["name"], address: profileInfo["address"], age: profileInfo["age"], gender : profileInfo["gender"], maritalstatus: profileInfo["maritalstatus"], email: profileInfo["email"], city: profileInfo["city"], infoGathered: profileInfo["infoGathered"] },
+		headers: { "Content-Type": "application/x-www-form-urlencoded" }
+	};
+	//direct way 
+	client.post("http://localhost:9090/StudentEnrollmentWithREST/webapi/studentResource/saveinfo",args, function (data, response) {
+		//console.log(response);
+	});
+}
+
 
 /**
 Returns list of end users after filtering
 **/
 function filterUsers(profileInfo) {
 	return profileInfo
-}
-
-//Save userinfo in SQL DB
-function saveUserInfo(profileInfo) {
- 	var post = {user_id:profileInfo["user_id"], user_name:profileInfo["name"], age:profileInfo["age"], gender:profileInfo["gender"], maritalstatus:profileInfo["maritalstatus"], city:profileInfo["city"]};	
- 	var query = connection.query('INSERT INTO userinfo SET ?', post, function(err, result) {
- 		if (err) 
- 			throw err;
- 	});
- 	console.log(query.sql);  
- 	connection.end();
-}
-
-//Delete userinfo in SQL DB
-function deleteUserInfo(user_id) {
- 	var post = {user_id:user_id};	
- 	var query = connection.query('delete from userinfo where ?', post, function(err, result) {
- 		if (err) 
- 			throw err;
- 	});
- 	console.log(query.sql);  
- 	connection.end();
-}
-
-//Save the userdata in SQL server DB
-function saveProfileInfo() {  
-    var request = new Request("INSERT into dbo.userinfo(user_id, user_name, age, gender, maritalstatus, city) values (@user_id, @name, @age, @gender, @maritalstatus, @city);", function(err) {  
-		if (err) {  
-			console.log(err);}  
-        });  
-		request.addParameter('user_id', TYPES.NVarChar, profileInfo["user_id"]);
-        request.addParameter('name', TYPES.NVarChar, profileInfo["name"]);
-		request.addParameter('age', TYPES.Int, profileInfo["age"]); 		
-        request.addParameter('gender', TYPES.NVarChar , profileInfo["gender"]);  
-		request.addParameter('maritalstatus', TYPES.Bit , profileInfo["maritalstatus"]);
-        request.addParameter('city', TYPES.NVarChar , profileInfo["city"]);  
-        request.on('row', function(columns) {  
-            columns.forEach(function(column) {  
-              if (column.value === null) {  
-                console.log('NULL');  
-              } else {  
-                console.log("user inserted is " + column.value); 
-              }  
-            });  
-        });       
-        connection.execSql(request);	
-}
-
-//Delete the userdata in SQL server DB
-function deleteProfileInfo(userId) {  
-    var request = new Request("delete from dbo.userinfo where user_id = @user_id;", function(err) {  
-		if (err) {  
-			console.log(err);}  
-        });  
-		request.addParameter('user_id', TYPES.NVarChar, userId);       
-        connection.execSql(request);	
 }
