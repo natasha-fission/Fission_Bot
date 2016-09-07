@@ -15,5 +15,11 @@
   "bugs": {
     "url": "https://github.com/natasha-fission/Fission_Bot/issues"
   },
-  "homepage": "https://github.com/natasha-fission/Fission_Bot#readme"
+  "homepage": "https://github.com/natasha-fission/Fission_Bot#readme",
+  "dependencies": {
+    "botbuilder": "^3.2.3",
+    "mysql": "^2.11.1",
+    "restify": "^4.1.1",
+    "tedious": "^1.14.0"
+  }
 }
